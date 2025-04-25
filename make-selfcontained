@@ -1,0 +1,69 @@
+#!/bin/bash
+
+set -e
+
+# show usage
+if [ "$1" == "-h" ] || [ "$1$2" == "" ];then
+    echo "Usage: $0 <executable>"
+    exit 1
+fi
+
+# args
+BINARY=$1
+OUTPUT="selfcontained"
+
+cleanup() {
+    echo "make $OUTPUT failed!"
+    rm -r "$OUTPUT"
+}
+trap cleanup EXIT
+
+interrupt() {
+    echo "user abort."
+    cleanup
+}
+trap interrupt INT
+
+# bin
+BIN_DIR=$OUTPUT/bin
+mkdir -p "$BIN_DIR"
+cp "$BINARY" "$BIN_DIR"
+
+# lib
+LIB_DIR=$OUTPUT/lib
+mkdir -p "$LIB_DIR"
+
+# loader
+LOADER_FILE=$(ldd "$BINARY" | grep "ld-linux-" | awk '{ print $1 }')
+cp "$LOADER_FILE" "$LIB_DIR"
+LOADER=$(basename "$LOADER_FILE")
+
+# libs
+ldd "$BINARY" | while read -r LIB_LINE;do
+    LIB_NAME=$(echo "$LIB_LINE" | awk -F" => " '{ print $1 }')
+    LIB_INFO=$(echo "$LIB_LINE" | awk -F" => " '{ print $2 }')
+    if [ "$LIB_INFO" != "" ];then
+        if [ "$LIB_INFO" == "not found" ];then
+            echo "$LIB_NAME not found! maybe you need change LD_LIBRARY_PATH"
+            exit 1
+        fi
+        LIB_FILE=$(echo "$LIB_INFO" | awk '{ print $1 }')
+        echo "coping $LIB_FILE"
+        cp "$LIB_FILE" "$LIB_DIR"
+    fi
+done
+
+# run.sh
+RUN_SH=$OUTPUT/run.sh
+echo "#!/bin/bash"                                         >  "$RUN_SH"
+echo "LOADER_NAME=$LOADER"                                 >> "$RUN_SH"
+echo "BINARY_NAME=$BINARY"                                 >> "$RUN_SH"
+echo 'SELF_PATH=$(realpath "$0")'                          >> "$RUN_SH"
+echo 'SELF_DIR=$(dirname "$SELF_PATH")'                    >> "$RUN_SH"
+echo 'LIB_DIR=$SELF_DIR/lib'                               >> "$RUN_SH"
+echo 'LOADER=$LIB_DIR/$LOADER_NAME'                        >> "$RUN_SH"
+echo 'BINARY=$SELF_DIR/bin/$BINARY_NAME'                   >> "$RUN_SH"
+echo 'LD_LIBRARY_PATH="$LIB_DIR" "$LOADER" "$BINARY" "$@"' >> "$RUN_SH"
+
+trap "" EXIT
+echo "make $OUTPUT successful."
