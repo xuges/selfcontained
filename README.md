@@ -18,6 +18,7 @@ Self-contained means the application bundles all required dependencies for execu
 Given a binary executable `a.out`, generate a self-contained directory using:
 
 ```bash
+wget https://raw.githubusercontent.com/xuges/selfcontained/refs/heads/main/make-selfcontained
 chmod +x make-selfcontained
 ./make-selfcontained a.out
 ```
@@ -44,7 +45,9 @@ Explanation:
 
 After generating the `selfcontained` directory, you may add other runtime resources. The directory name `selfcontained` can be modified.
 
-**Note: If using `dlopen` to dynamically load shared libraries, you must manually manage the shared library files.**
+**Note:**
+- If using `dlopen` to dynamically load shared libraries, you must manually manage the shared library files.
+- The working directory when launching the program via run.sh is the directory where run.sh resides.
 
 ### Mechanism
 

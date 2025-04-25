@@ -17,6 +17,7 @@
 假设二进制可执行文件为 `a.out` ，使用以下命令生成自包含目录：
 
 ```bash
+wget https://raw.githubusercontent.com/xuges/selfcontained/refs/heads/main/make-selfcontained
 chmod +x make-selfcontained
 ./make-selfcontained a.out
 ```
@@ -43,7 +44,9 @@ selfcontained/
 
 生成 `selfcontained` 目录后，可自行添加其他运行时用到的资源，`selfcontained` 目录名称可自行修改。
 
-**注意：如果使用 `dlopen` 的方式动态调用动态链接库，需要手动管理动态库文件。**
+**注意：**
+- 如果使用 `dlopen` 的方式动态调用动态链接库，需要手动管理动态库文件
+- 使用 `run.sh` 启动程序的工作目录在 `run.sh` 所在目录
 
 ### 原理
 
@@ -58,4 +61,5 @@ selfcontained/
 ```bash
 ldd
 awk
+grep
 ```
