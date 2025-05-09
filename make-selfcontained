@@ -129,15 +129,14 @@ if [[ "$FILE_TYPE" == "EXEC" ]];then
     LOADER_FILE=$(ldd "$INPUT" | grep "ld-linux-" | awk '{ print $1 }')
     cp "$LOADER_FILE" "$BIN_DIR/"
     patch_interpreter "$INPUT" "$BIN_DIR/$FILE_NAME"
+    # run.sh
+    gen_runsh "$FILE_NAME" "$OUTPUT/run.sh"
 fi
 
 # lib
 LIB_DIR=$OUTPUT/lib
 mkdir -p "$LIB_DIR"
 copy_depends "$INPUT" "$LIB_DIR/"
-
-# run.sh
-gen_runsh "$FILE_NAME" "$OUTPUT/run.sh"
 
 # over
 trap "" EXIT
