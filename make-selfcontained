@@ -8,10 +8,97 @@ if [ "$1" == "-h" ] || [ "$1$2" == "" ];then
     exit 1
 fi
 
+# functions
+
+patch_interpreter() {
+    EXE=$1
+    OUT=$2
+    INTERP_OFFSET=$(printf "%d" "$(readelf -l "$EXE" | grep INTERP | awk '{print $2}')")
+    INTERP_LENGTH=$(printf "%d" "$(readelf -l "$EXE" | grep INTERP -A1 | tail -1 | awk '{print $1}')")
+    INTERP_END=$(( INTERP_OFFSET + INTERP_LENGTH ))
+    INTERP_PATH=$(readelf -l "$EXE" | grep "interpreter: " | awk '{print $4}' | awk -F']' '{print $1}')
+    INTERP_FILE=$(basename "$INTERP_PATH")
+    INTERP_FILE_LEN=${#INTERP_FILE}
+    INTERP_DIFF=$(( INTERP_LENGTH - INTERP_FILE_LEN - 1 )) # NUL terminal
+
+    echo "$EXE interpreter:"
+    echo "Offset $INTERP_OFFSET"
+    echo "End    $INTERP_END"
+    echo "Length $INTERP_LENGTH"
+    echo "Interp $INTERP_PATH"
+    echo "Patch  $INTERP_FILE"
+    echo "Diff   $INTERP_DIFF"
+
+    head -c "$INTERP_OFFSET" < "$EXE" > "$OUT"
+    echo -n "$INTERP_FILE" >> "$OUT"
+    for (( i=0; i<INTERP_DIFF; i++ ));do
+      echo -n -e "\\x00" >> "$OUT"
+    done
+    tail -c +$INTERP_END < "$EXE" >> $OUT
+}
+
+copy_depends() {
+    FILE=$1
+    OUT=$2
+
+    ldd "$FILE" | while read -r LIB_LINE;do
+        LIB_NAME=$(echo "$LIB_LINE" | awk -F" => " '{ print $1 }')
+        LIB_INFO=$(echo "$LIB_LINE" | awk -F" => " '{ print $2 }')
+        if [ "$LIB_INFO" != "" ];then
+            if [ "$LIB_INFO" == "not found" ];then
+                echo "$LIB_NAME not found! maybe you need LD_LIBRARY_PATH"
+                exit 1
+            fi
+            LIB_FILE=$(echo "$LIB_INFO" | awk '{ print $1 }')
+            echo "coping $LIB_FILE"
+            cp "$LIB_FILE" "$OUT"
+        fi
+    done
+}
+
+gen_runsh() {
+    EXE=$1
+    RUN_SH=$2
+    echo "#!/bin/bash"                               >  "$RUN_SH"
+    echo "BINARY_NAME=$EXE"                          >> "$RUN_SH"
+    echo 'SELF_PATH=$(realpath "$0")'                >> "$RUN_SH"
+    echo 'SELF_DIR=$(dirname "$SELF_PATH")'          >> "$RUN_SH"
+    echo 'BIN_DIR=$SELF_DIR/bin'                     >> "$RUN_SH"
+    echo 'LIB_DIR=$SELF_DIR/lib'                     >> "$RUN_SH"
+    echo 'BINARY=$BIN_DIR/$BINARY_NAME'              >> "$RUN_SH"
+    echo 'cd $BIN_DIR/'                              >> "$RUN_SH"
+    echo 'chmod +x $BINARY'                          >> "$RUN_SH"
+    echo 'LD_LIBRARY_PATH="$LIB_DIR" "$BINARY" "$@"' >> "$RUN_SH"
+    chmod +x "$RUN_SH"
+}
+
 # args
-BINARY=$1
+INPUT=$1
 OUTPUT="selfcontained"
 
+# check
+if [ ! -f "$INPUT" ]; then
+    echo "$INPUT no such file!"
+    exit 1
+fi
+
+FILE_TYPE=$(readelf -h "$INPUT" | grep Type: | awk '{print $2}')
+if [[ "$FILE_TYPE" == "" ]]; then
+    echo "$INPUT not elf file!"
+    exit 1
+fi
+
+if [[ "$FILE_TYPE" != "EXEC" && "$FILE_TYPE" != "DYN" ]];then
+    echo "$INPUT is unsupported elf file type $FILE_TYPE"
+    exit 1
+fi
+
+if [[ $(readelf -d "$INPUT" | grep NEEDED) == "" ]]; then
+    echo "$INPUT not dynamic linked."
+    exit 1
+fi
+
+# trap and cleanup
 cleanup() {
     echo "make $OUTPUT failed!"
     rm -r "$OUTPUT"
@@ -24,46 +111,25 @@ interrupt() {
 }
 trap interrupt INT
 
+FILE_NAME=$(basename "$INPUT")
+
 # bin
-BIN_DIR=$OUTPUT/bin
-mkdir -p "$BIN_DIR"
-cp "$BINARY" "$BIN_DIR"
+if [[ "$FILE_TYPE" == "EXEC" ]];then
+    BIN_DIR=$OUTPUT/bin
+    mkdir -p "$BIN_DIR"
+    LOADER_FILE=$(ldd "$INPUT" | grep "ld-linux-" | awk '{ print $1 }')
+    cp "$LOADER_FILE" "$BIN_DIR/"
+    patch_interpreter "$INPUT" "$BIN_DIR/$FILE_NAME"
+fi
 
 # lib
 LIB_DIR=$OUTPUT/lib
 mkdir -p "$LIB_DIR"
-
-# loader
-LOADER_FILE=$(ldd "$BINARY" | grep "ld-linux-" | awk '{ print $1 }')
-cp "$LOADER_FILE" "$LIB_DIR"
-LOADER=$(basename "$LOADER_FILE")
-
-# libs
-ldd "$BINARY" | while read -r LIB_LINE;do
-    LIB_NAME=$(echo "$LIB_LINE" | awk -F" => " '{ print $1 }')
-    LIB_INFO=$(echo "$LIB_LINE" | awk -F" => " '{ print $2 }')
-    if [ "$LIB_INFO" != "" ];then
-        if [ "$LIB_INFO" == "not found" ];then
-            echo "$LIB_NAME not found! maybe you need change LD_LIBRARY_PATH"
-            exit 1
-        fi
-        LIB_FILE=$(echo "$LIB_INFO" | awk '{ print $1 }')
-        echo "coping $LIB_FILE"
-        cp "$LIB_FILE" "$LIB_DIR"
-    fi
-done
+copy_depends "$INPUT" "$LIB_DIR/"
 
 # run.sh
-RUN_SH=$OUTPUT/run.sh
-echo "#!/bin/bash"                                         >  "$RUN_SH"
-echo "LOADER_NAME=$LOADER"                                 >> "$RUN_SH"
-echo "BINARY_NAME=$BINARY"                                 >> "$RUN_SH"
-echo 'SELF_PATH=$(realpath "$0")'                          >> "$RUN_SH"
-echo 'SELF_DIR=$(dirname "$SELF_PATH")'                    >> "$RUN_SH"
-echo 'LIB_DIR=$SELF_DIR/lib'                               >> "$RUN_SH"
-echo 'LOADER=$LIB_DIR/$LOADER_NAME'                        >> "$RUN_SH"
-echo 'BINARY=$SELF_DIR/bin/$BINARY_NAME'                   >> "$RUN_SH"
-echo 'LD_LIBRARY_PATH="$LIB_DIR" "$LOADER" "$BINARY" "$@"' >> "$RUN_SH"
+gen_runsh "$FILE_NAME" "$OUTPUT/run.sh"
 
+# over
 trap "" EXIT
 echo "make $OUTPUT successful."
