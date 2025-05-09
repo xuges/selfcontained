@@ -4,7 +4,7 @@ set -e
 
 # show usage
 if [ "$1" == "-h" ] || [ "$1$2" == "" ];then
-    echo "Usage: $0 <executable>"
+    echo "Usage: $0 <executable> [outputdir]"
     exit 1
 fi
 
@@ -74,12 +74,21 @@ gen_runsh() {
 
 # args
 INPUT=$1
-OUTPUT="selfcontained"
+OUTPUT=$2
 
 # check
 if [ ! -f "$INPUT" ]; then
     echo "$INPUT no such file!"
     exit 1
+fi
+
+if [ "$OUTPUT" == "/" ]; then
+    echo "invalid outputdir $OUTPUT"
+    exit 1
+fi
+
+if [ "$OUTPUT" == "" ]; then
+    OUTPUT="selfcontained"
 fi
 
 FILE_TYPE=$(readelf -h "$INPUT" | grep Type: | awk '{print $2}')
