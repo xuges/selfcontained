@@ -44,7 +44,7 @@ copy_depends() {
     ldd "$FILE" | while read -r LIB_LINE;do
         LIB_NAME=$(echo "$LIB_LINE" | awk -F" => " '{ print $1 }')
         LIB_INFO=$(echo "$LIB_LINE" | awk -F" => " '{ print $2 }')
-        if [ "$LIB_INFO" != "" ];then
+        if [[ "$LIB_NAME" != "linux-vdso.so.1" && "$LIB_INFO" != "" ]];then
             if [ "$LIB_INFO" == "not found" ];then
                 echo "$LIB_NAME not found! maybe you need LD_LIBRARY_PATH"
                 exit 1
