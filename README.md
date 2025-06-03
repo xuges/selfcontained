@@ -28,9 +28,9 @@ After successful execution, a `selfcontained` directory will be created:
 ```
 selfcontained/
 ├── bin
+│   ├── ld-linux-x86-64.so.2
 │   └── a.out
 ├── lib
-│   ├── ld-linux-x86-64.so.2
 │   ├── libc.so.6
 │   ├── libgcc_s.so.1
 │   ├── libm.so.6
@@ -39,7 +39,7 @@ selfcontained/
 ```
 
 Explanation:
-- `bin` stores a copy of the input `a.out`
+- `bin` stores a copy of the input `a.out` and dynamic link interpreter
 - `lib` contains all dynamically linked dependencies (including `libc`)
 - `run.sh` is the execution script for `a.out` (filename can be modified, but path must remain unchanged)
 
@@ -47,13 +47,15 @@ After generating the `selfcontained` directory, you may add other runtime resour
 
 **Note:**
 - If using `dlopen` to dynamically load shared libraries, you must manually manage the shared library files.
-- The working directory when launching the program via run.sh is the directory where run.sh resides.
+- The working directory when launching the program with `run.sh` is the bin directory.
 
 ### Mechanism
 
-The `make-selfcontained` script itself detects dynamic library dependencies of the target executable, copies them to the `selfcontained` directory, and generates a `run.sh` script that launches the executable via direct invocation of the loader `ld-linux-x86-64.so.2`. This ensures all dynamic libraries (starting from `libc`) are preferentially loaded from the bundled set.
+The `make-selfcontained` script itself searches for the shared libraries required by the target executable, copies them along with the dynamic linker to the `selfcontained` directory, and modifies the dynamic linker path in the copied executable. The generated `run.sh` script sets `LD_LIBRARY_PATH` before execution, ensuring the executable prioritizes the bundled `ld-linux-x86-64.so.2` and all subsequent shared libraries, including libc, from its own directory.
 
-Reference: https://www.cnblogs.com/pengdonglin137/p/17623177.html
+Reference: <br/>
+https://www.cnblogs.com/pengdonglin137/p/17623177.html
+https://www.bytezonex.com/archives/Ivbb0Uz6.html
 
 ### Dependencies
 
@@ -61,5 +63,5 @@ The `make-selfcontained` script requires:
 
 ```bash
 ldd
-awk
+readelf
 ```

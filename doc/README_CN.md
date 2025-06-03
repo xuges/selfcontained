@@ -27,9 +27,9 @@ chmod +x make-selfcontained
 ```
 selfcontained/
 ├── bin
+│   ├── ld-linux-x86-64.so.2
 │   └── a.out
 ├── lib
-│   ├── ld-linux-x86-64.so.2
 │   ├── libc.so.6
 │   ├── libgcc_s.so.1
 │   ├── libm.so.6
@@ -38,7 +38,7 @@ selfcontained/
 ```
 
 说明：
-- `bin` 存放 `make-selfcontained` 传入的 `a.out` 复制体
+- `bin` 存放 `make-selfcontained` 传入的 `a.out` 和动态链接解释器
 - `lib` 下放入 `a.out` 依赖的所有动态链接库(包括 `libc`)
 - `run.sh` 是运行 `a.out` 的执行脚本，文件名称可自行修改，位置不能动
 
@@ -46,13 +46,15 @@ selfcontained/
 
 **注意：**
 - 如果使用 `dlopen` 的方式动态调用动态链接库，需要手动管理动态库文件
-- 使用 `run.sh` 启动程序的工作目录在 `run.sh` 所在目录
+- 使用 `run.sh` 启动程序的工作目录在 `bin` 目录
 
 ### 原理
 
-`make-selfcontained` 本身也是一个脚本，它会查找目标可执行文件依赖的动态链接库文件并复制到 `selfcontained` 目录里，然后在生成的 `run.sh` 脚本里通过直接调用 `ld-linux-x86-64.so.2` 加载器的方式运行目标可执行文件，实现从 `libc` 开始，所有的动态链接库都优先使用自带的。
+`make-selfcontained` 本身也是一个脚本，它会查找目标可执行文件依赖的动态链接库文件，和动态链接解释器一起复制到 `selfcontained` 目录里，复制目标可执行文件后修改动态链接解释器，而生成的 `run.sh` 脚本会在执行前设置 `LD_LIBRARY_PATH` ，这样可执行文件运行时会调用自带的 `ld-linux-x86-64.so.2` ，实现从 `libc` 开始所有的动态链接库都优先使用自带的库文件。
 
-参考资料：https://www.cnblogs.com/pengdonglin137/p/17623177.html
+参考资料：<br/>
+https://www.cnblogs.com/pengdonglin137/p/17623177.html
+https://www.bytezonex.com/archives/Ivbb0Uz6.html
 
 ### 依赖
 
@@ -60,6 +62,5 @@ selfcontained/
 
 ```bash
 ldd
-awk
-grep
+readelf
 ```
