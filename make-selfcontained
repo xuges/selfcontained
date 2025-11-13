@@ -2,6 +2,8 @@
 
 set -e
 
+export LANGUAGE=en_US
+
 # show usage
 if [ "$1" == "-h" ] || [ "$1$2" == "" ];then
     echo "Usage: $0 <executable> [outputdir]"
@@ -91,7 +93,8 @@ if [ "$OUTPUT" == "" ]; then
     OUTPUT="selfcontained"
 fi
 
-FILE_TYPE=$(readelf -h "$INPUT" | grep Type: | awk '{print $2}')
+FILE_TYPE_FULL=$(readelf -h "$INPUT" | grep Type:)
+FILE_TYPE=$(echo "$FILE_TYPE_FULL" | awk '{print $2}')
 if [[ "$FILE_TYPE" == "" ]]; then
     echo "$INPUT not elf file!"
     exit 1
@@ -123,7 +126,7 @@ trap interrupt INT
 FILE_NAME=$(basename "$INPUT")
 
 # bin
-if [[ "$FILE_TYPE" == "EXEC" ]];then
+if echo "$FILE_TYPE_FULL" | grep -iq "executable";then
     BIN_DIR=$OUTPUT/bin
     mkdir -p "$BIN_DIR"
     LOADER_FILE=$(ldd "$INPUT" | grep "ld-linux-" | awk '{ print $1 }')
